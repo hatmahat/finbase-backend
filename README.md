@@ -55,6 +55,44 @@ Tracked finances for ~4 years in Simple (formerly Budgetify). App became abandon
 
 The Python backend is only needed for ingestion — it holds the Anthropic API key and runs PDF parsing, neither of which can live in the browser. All other reads and writes go from the frontend to Supabase directly via `supabase-js`.
 
+---
+
+## Project structure
+
+```
+finbase-backend/
+├── app/                          # Python package — application logic
+│   ├── main.py                   # CLI entry point (typer): ingest, ingest-dir, import-csv
+│   ├── core/
+│   │   ├── config.py             # Settings loaded from .env
+│   │   └── database.py           # Supabase client singleton
+│   ├── models/                   # Dataclasses mirroring DB table shapes
+│   ├── schemas/                  # Pydantic v2 — validates Claude output & CSV rows
+│   ├── repositories/             # All Supabase queries (dedup upsert, FK lookups)
+│   └── services/                 # Orchestration: ingest.py, csv_import.py
+│
+├── pkg/                          # External integration package
+│   └── parser/
+│       ├── pdf_reader.py         # pikepdf (decrypt) + pdfplumber (extract text)
+│       ├── claude_extractor.py   # Anthropic SDK: forced tool-use record_transactions
+│       └── fingerprint.py        # sha256(wallet | date | amount | description)
+│
+├── migrations/                   # Sqitch — SQL-native versioned migrations
+│   ├── sqitch.plan
+│   ├── sqitch.conf
+│   ├── deploy/initial_schema.sql
+│   ├── revert/initial_schema.sql
+│   └── verify/initial_schema.sql
+│
+├── data/                         # gitignored — local files only
+│   ├── statements/               # drop PDF e-statements here
+│   └── imports/                  # CSV for one-time migration
+│
+├── Makefile                      # make ingest / import-csv / migrate
+├── requirements.txt
+└── .env.example
+```
+
 ### Key design decisions
 
 | Decision | Rationale |
@@ -73,7 +111,7 @@ The Python backend is only needed for ingestion — it holds the Anthropic API k
 |---|---|
 | Frontend | Next.js + TypeScript, Tailwind CSS, shadcn/ui, Recharts |
 | Database | Supabase (Postgres) + supabase-js |
-| Backend | Python — FastAPI (or local CLI script) |
+| Backend | Python — CLI (`make ingest`) via typer; Cloud Run / Railway when hosted |
 | PDF parsing | pdfplumber + pikepdf; pytesseract for scanned statements |
 | AI | Anthropic SDK — `claude-sonnet-4-6` (swap to `claude-haiku-4-5` to cut cost) |
 | Hosting | Vercel (frontend), Cloud Run or Railway (Python backend) |
@@ -84,7 +122,7 @@ Cost: effectively $0/month except a few cents of Claude API per statement.
 
 ## Database schema
 
-The schema lives in `2026-06-27.sql`. Core tables:
+The schema lives in `migrations/deploy/initial_schema.sql` (managed via Sqitch). Core tables:
 
 - **`transactions`** — the ledger; every row is one transaction
 - **`wallets`** — accounts (BCA Leisure, BRI Credit Card, Mandiri Opr. Cash, etc.)
@@ -99,9 +137,9 @@ All tables carry `created_at` / `updated_at` with an auto-trigger (`set_updated_
 ## Build roadmap
 
 **Phase 1 — kill the pain**
-1. Spin up Supabase; run `2026-06-27.sql`
-2. CSV importer to seed 809 historical transactions (one-time migration from Simple app)
-3. PDF ingestion script: PDF → Claude structured extraction → Supabase insert with dedup
+1. Spin up Supabase; run `make migrate` (Sqitch deploys `migrations/deploy/initial_schema.sql`)
+2. `make import-csv` — seed 809 historical transactions from `data/imports/`
+3. `make ingest f=<pdf> w="<wallet>"` — PDF → Claude extraction → Supabase insert with dedup
 4. Frontend review queue: approve / reject pending rows per transaction
 
 **Phase 2 — only after Phase 1 earns its keep**

@@ -43,11 +43,11 @@ Built as a **personal tool + portfolio/learning artifact — not a business.** G
 - Frontend reads/writes via `supabase-js` directly — no backend needed for CRUD
 - Supabase Auth + Row Level Security
 
-**Backend: Python — ingestion only**
-- FastAPI (or local CLI script for MVP)
+**Backend: Python — ingestion only (CLI-first)**
+- CLI via typer (`make ingest`, `make import-csv`)
 - pdfplumber + pikepdf (PDF parsing/decryption); pytesseract for scanned statements
 - Anthropic SDK (Claude extraction + categorization)
-- **Do NOT host on Vercel** — PDF/OCR libs are native binaries. Use Cloud Run (scale-to-zero) or Railway/Render.
+- **Do NOT host on Vercel** — PDF/OCR libs are native binaries. Use Cloud Run (scale-to-zero) or Railway/Render when hosted.
 
 **AI**
 - Anthropic API, structured output via forced tool-use (`record_transactions`) → returns typed JSON array
@@ -77,9 +77,37 @@ Effectively **$0/month except a few cents of Claude API per statement.**
 
 ---
 
+## Project structure
+
+```
+finbase-backend/
+├── app/                          # Application logic
+│   ├── main.py                   # CLI entry: ingest, ingest-dir, import-csv
+│   ├── core/                     # config.py (Settings), database.py (Supabase client)
+│   ├── models/                   # Dataclasses mirroring DB tables
+│   ├── schemas/                  # Pydantic v2: ExtractedTransaction, CsvRow
+│   ├── repositories/             # Supabase queries + dedup upsert
+│   └── services/                 # Orchestration: ingest.py, csv_import.py
+├── pkg/                          # External integrations
+│   └── parser/
+│       ├── pdf_reader.py         # pikepdf + pdfplumber; pytesseract fallback
+│       ├── claude_extractor.py   # Anthropic SDK, forced tool-use record_transactions
+│       └── fingerprint.py        # sha256 dedup key
+├── migrations/                   # Sqitch migrations
+│   ├── deploy/initial_schema.sql
+│   ├── revert/initial_schema.sql
+│   └── verify/initial_schema.sql
+├── data/                         # gitignored
+│   ├── statements/               # drop PDFs here
+│   └── imports/                  # CSV for one-time migration
+└── Makefile                      # make ingest / import-csv / migrate / revert
+```
+
+---
+
 ## Postgres schema
 
-Schema file: `2026-06-27.sql`. Normalized design — lookup tables instead of raw strings.
+Schema file: `migrations/deploy/initial_schema.sql` (Sqitch). Normalized design — lookup tables instead of raw strings.
 
 **Core tables**
 - `transactions` — the ledger; every row is one transaction. `status` ∈ `{pending, approved, rejected}`. `fingerprint` is `UNIQUE`. `model_confidence` 0–1.
@@ -110,16 +138,16 @@ Bank Fees, Cash, Cellphone, Charity, Cinema, Coffee, Cosmetics, Credit Card, Doc
 
 ## Data files
 
-- `transactions-from-1-1-2025-to-31-12-2026 (1).csv` — 809 transactions from Simple app (Jan–Dec 2025). One-time import to seed historical data. CSV columns: `date, amount, type, category, originWallet, destinationWallet, note, location`.
+- `data/imports/transactions-from-1-1-2025-to-31-12-2026.csv` — 809 transactions from Simple app (Jan–Dec 2025). One-time import to seed historical data. CSV columns: `date, amount, type, category, originWallet, destinationWallet, note, location`.
 
 ---
 
 ## Build roadmap
 
 **Phase 1 — kill the pain**
-1. Spin up Supabase; run `2026-06-27.sql`
-2. CSV importer to seed 809 historical transactions
-3. PDF ingestion script: PDF → Claude structured extraction → Supabase insert with dedup
+1. Spin up Supabase; `make migrate` (Sqitch deploys `migrations/deploy/initial_schema.sql`)
+2. `make import-csv` — seed 809 historical transactions from `data/imports/`
+3. `make ingest f=<pdf> w="<wallet>"` — PDF → Claude extraction → Supabase insert with dedup
 4. Frontend review queue: approve / reject pending rows per transaction
 
 **Phase 2 — after Phase 1 earns its keep**
@@ -150,8 +178,8 @@ Bank Fees, Cash, Cellphone, Charity, Cinema, Coffee, Cosmetics, Credit Card, Doc
 
 ## Open items
 
-- Set up Supabase and run `2026-06-27.sql`
-- Build CSV import script (one-time migration)
-- Build PDF ingestion script with Claude API
-- Test with real BCA/BRI/Mandiri statement and tune extraction prompt
-- Decide CLI vs. hosted backend for ingestion (CLI is the simplest MVP path)
+- Set up Supabase; fill in `.env` from `.env.example`; run `make migrate`
+- Seed history: `make import-csv`
+- Test ingestion: `make ingest f=data/statements/<file>.pdf w="<wallet>"`
+- Tune Claude extraction prompt against a real BCA/BRI/Mandiri statement
+- Build frontend review queue (Next.js in `finbase-frontend` repo)

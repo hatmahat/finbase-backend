@@ -1,0 +1,19 @@
+# Environment
+.env
+
+# Local data — never commit PDFs or CSVs
+data/
+
+# Logs
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/

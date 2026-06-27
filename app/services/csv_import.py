@@ -1,0 +1,63 @@
+import csv
+from pathlib import Path
+from app.core.database import get_client
+from app.schemas.csv_row import CsvRow
+from pkg.parser import fingerprint as fp
+from app.repositories import transaction as txn_repo, wallet as wallet_repo, category as cat_repo
+from app.models.transaction import Transaction
+
+
+def run(csv_path: str) -> tuple[int, int]:
+    client = get_client()
+    wallet_map = wallet_repo.get_name_to_id(client)
+    category_map = cat_repo.get_name_to_id(client)
+    currency_id = _get_currency_id(client, "IDR")
+
+    transactions: list[Transaction] = []
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for raw in reader:
+            row = CsvRow.model_validate(raw)
+
+            wallet_id = wallet_map.get(row.origin_wallet)
+            if wallet_id is None:
+                print(f"  [skip] unknown wallet: {row.origin_wallet!r}")
+                continue
+
+            fingerprint = fp.make(
+                row.origin_wallet,
+                row.date,
+                row.amount,
+                row.note or "",
+            )
+            txn_type_id = _get_txn_type_id(client, row.type.lower())
+            to_wallet_id = wallet_map.get(row.destination_wallet) if row.destination_wallet else None
+            category_id = category_map.get(row.category) if row.category else None
+
+            transactions.append(
+                Transaction(
+                    txn_date=row.date,
+                    currency_id=currency_id,
+                    amount=row.amount,
+                    transaction_type_id=txn_type_id,
+                    category_id=category_id,
+                    wallet_id=wallet_id,
+                    to_wallet_id=to_wallet_id,
+                    note=row.note,
+                    fingerprint=fingerprint,
+                    file_name=Path(csv_path).name,
+                    status="approved",
+                )
+            )
+
+    return txn_repo.insert_many(client, transactions)
+
+
+def _get_currency_id(client, code: str) -> int:
+    result = client.table("currencies").select("id").eq("name", code).single().execute()
+    return result.data["id"]
+
+
+def _get_txn_type_id(client, name: str) -> int:
+    result = client.table("transaction_types").select("id").eq("name", name).single().execute()
+    return result.data["id"]

@@ -17,30 +17,30 @@ Tracked finances for ~4 years in Simple (formerly Budgetify). App became abandon
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  INGESTION                                                              │
-│                                                                         │
-│   Bank PDF e-statement                                                  │
-│          │                                                              │
-│          ▼                                                              │
-│   Python backend (FastAPI / CLI)                                        │
-│   ├── pdfplumber / pikepdf  →  extract raw text                        │
-│   └── Anthropic SDK  →  Claude (claude-sonnet-4-6)                     │
-│          │   structured output: forced tool-use record_transactions     │
-│          │   returns guaranteed-valid JSON array                        │
-│          ▼                                                              │
-│   fingerprint = sha256(account | date | amount | description)          │
-│          │                                                              │
-│          │   INSERT … ON CONFLICT DO NOTHING                           │
-│          │   re-uploading the same statement is a silent no-op         │
-│          ▼                                                              │
+┌───────────────────────────────────────────────────────────────────────┐
+│  INGESTION                                                            │
+│                                                                       │
+│   Bank PDF e-statement                                                │
+│          │                                                            │
+│          ▼                                                            │
+│   Python backend (FastAPI / CLI)                                      │
+│   ├── pdfplumber / pikepdf  →  extract raw text                       │
+│   └── Anthropic SDK  →  Claude (claude-sonnet-4-6)                    │
+│          │   structured output: forced tool-use record_transaction    │
+│          │   returns guaranteed-valid JSON array                      │
+│          ▼                                                            │
+│   fingerprint = sha256(account | date | amount | description)         │
+│          │                                                            │
+│          │   INSERT … ON CONFLICT DO NOTHING                          │
+│          │   re-uploading the same statement is a silent no-op        │
+│          ▼                                                            │
 │   Supabase Postgres  ─────────────────────────────────────────────┐   │
 │   status = 'pending'  +  model_confidence (0–1)                   │   │
 └───────────────────────────────────────────────────────────────────│───┘
                                                                     │
 ┌───────────────────────────────────────────────────────────────────│───┐
 │  FRONTEND  (Next.js on Vercel — talks to Supabase directly)       │   │
-│                                                                    │   │
+│                                                                   │   │
 │   ┌─────────────────────┐      ┌───────────────────────────────┐  │   │
 │   │   Review queue      │      │   Analytics dashboard         │  │   │
 │   │   (approval inbox)  │      │   · savings rate              │  │   │
@@ -48,7 +48,7 @@ Tracked finances for ~4 years in Simple (formerly Budgetify). App became abandon
 │   │   pending rows  ────┼──────┼── monthly totals              │  │   │
 │   │   approve / reject  │      │   · wallet balances           │  │   │
 │   └──────────┬──────────┘      └───────────────────────────────┘  │   │
-│              │ status = 'approved' / 'rejected'                    │   │
+│              │ status = 'approved' / 'rejected'                   │   │
 │              └────────────────────────────────────────────────────┘   │
 └───────────────────────────────────────────────────────────────────────┘
 ```

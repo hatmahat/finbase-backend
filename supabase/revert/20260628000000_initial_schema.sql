@@ -25,3 +25,6 @@ drop table if exists currencies;
 drop table if exists wallet_types;
 drop table if exists categories;
 drop table if exists category_groups;
+
+drop type if exists transaction_status;
+drop type if exists asset_class_type;

@@ -1,3 +1,6 @@
+create type transaction_status as enum ('pending', 'approved', 'rejected');
+create type asset_class_type   as enum ('stock', 'etf', 'crypto');
+
 create table category_groups (
     id          bigint generated always as identity primary key,
     created_at  timestamptz not null default now(),
@@ -76,9 +79,8 @@ create table transactions (
     raw_description       text,                             -- original bank narration
     balance_after         numeric(18,2),                   -- running balance from the statement line, if present
     fingerprint           text not null unique,            -- dedup key
-    model_confidence      numeric(3,2) check (model_confidence >= 0 and model_confidence <= 1),                     -- 0..1 model confidence
-    status                text not null default 'pending'
-                          check (status in ('pending','approved','rejected')),
+    model_confidence      numeric(3,2) check (model_confidence >= 0 and model_confidence <= 1),
+    status                transaction_status not null default 'pending',
     file_name             text
 );
 
@@ -89,7 +91,7 @@ create table securities (
     wallet_id    bigint not null references wallets(id) on delete restrict,  -- which platform holds it (Nanovest, GoTrade)
     ticker       text not null unique,            -- 'SPY', 'AAPL', 'BTC'
     name         text,                            -- 'SPDR S&P 500 ETF'
-    asset_class  text not null default 'stock'   -- 'stock','etf','crypto'
+    asset_class  asset_class_type not null default 'stock'
 );
 
 create table holdings (

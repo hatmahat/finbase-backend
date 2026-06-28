@@ -1,5 +1,0 @@
-%syntax-version=1.0.0
-%project=finbase
-%uri=https://github.com/hatmahat/finbase-backend
-
-initial_schema 2026-06-27T00:00:00Z hatmahat <hatmahat@gmail.com> # Initial schema: transactions, wallets, categories, securities, holdings

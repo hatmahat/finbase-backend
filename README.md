@@ -23,7 +23,7 @@ Tracked finances for ~4 years in Simple (formerly Budgetify). App became abandon
 │   Bank PDF e-statement                                                │
 │          │                                                            │
 │          ▼                                                            │
-│   Python backend (FastAPI / CLI)                                      │
+│   Python CLI (typer)                                                  │
 │   ├── pdfplumber / pikepdf  →  extract raw text                       │
 │   └── Anthropic SDK  →  Claude (claude-sonnet-4-6)                    │
 │          │   structured output: forced tool-use record_transaction    │
@@ -77,12 +77,9 @@ finbase-backend/
 │       ├── claude_extractor.py   # Anthropic SDK: forced tool-use record_transactions
 │       └── fingerprint.py        # sha256(wallet | date | amount | description)
 │
-├── migrations/                   # Sqitch — SQL-native versioned migrations
-│   ├── sqitch.plan
-│   ├── sqitch.conf
-│   ├── deploy/initial_schema.sql
-│   ├── revert/initial_schema.sql
-│   └── verify/initial_schema.sql
+├── supabase/                     # Supabase CLI migrations
+│   ├── migrations/               # Timestamped deploy scripts
+│   └── revert/                   # Manual revert scripts (one per migration)
 │
 ├── data/                         # gitignored — local files only
 │   ├── statements/               # drop PDF e-statements here
@@ -111,7 +108,7 @@ finbase-backend/
 |---|---|
 | Frontend | Next.js + TypeScript, Tailwind CSS, shadcn/ui, Recharts |
 | Database | Supabase (Postgres) + supabase-js |
-| Backend | Python — CLI (`make ingest`) via typer; Cloud Run / Railway when hosted |
+| Backend | Python CLI (`make ingest`) via typer — ingestion only; no API server |
 | PDF parsing | pdfplumber + pikepdf; pytesseract for scanned statements |
 | AI | Anthropic SDK — `claude-sonnet-4-6` (swap to `claude-haiku-4-5` to cut cost) |
 | Hosting | Vercel (frontend), Cloud Run or Railway (Python backend) |
@@ -122,7 +119,7 @@ Cost: effectively $0/month except a few cents of Claude API per statement.
 
 ## Database schema
 
-The schema lives in `migrations/deploy/initial_schema.sql` (managed via Sqitch). Core tables:
+The schema lives in `supabase/migrations/` (managed via Supabase CLI). Core tables:
 
 - **`transactions`** — the ledger; every row is one transaction
 - **`wallets`** — accounts (BCA Leisure, BRI Credit Card, Mandiri Opr. Cash, etc.)
@@ -137,7 +134,7 @@ All tables carry `created_at` / `updated_at` with an auto-trigger (`set_updated_
 ## Build roadmap
 
 **Phase 1 — kill the pain**
-1. Spin up Supabase; run `make migrate` (Sqitch deploys `migrations/deploy/initial_schema.sql`)
+1. Spin up Supabase; run `make migrate` (`supabase db push` applies all migrations)
 2. `make import-csv` — seed 809 historical transactions from `data/imports/`
 3. `make ingest f=<pdf> w="<wallet>"` — PDF → Claude extraction → Supabase insert with dedup
 4. Frontend review queue: approve / reject pending rows per transaction

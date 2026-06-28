@@ -16,11 +16,17 @@ def run(pdf_path: str, wallet_name: str, password: str | None = None) -> tuple[i
     text = pdf_reader.extract_text(pdf_path, password=password)
     extracted = claude_extractor.extract(text, wallet_name)
 
+    txn_type_map = _get_txn_type_map(client)
+
     transactions: list[Transaction] = []
     for e in extracted:
-        fingerprint = fp.make(wallet_name, e.txn_date, e.amount, e.raw_description or "")
-        txn_type_id = _get_txn_type_id(client, e.type)
         to_wallet_id = wallet_map.get(e.to_wallet) if e.to_wallet else None
+
+        if e.type == "transfer" and to_wallet_id is None:
+            print(f"  [skip] transfer without resolvable destination: {e.txn_date} {e.amount} {e.raw_description!r}")
+            continue
+
+        fingerprint = fp.make(wallet_name, e.txn_date, e.amount, e.raw_description or "")
         category_id = category_map.get(e.category) if e.category else None
 
         transactions.append(
@@ -28,7 +34,7 @@ def run(pdf_path: str, wallet_name: str, password: str | None = None) -> tuple[i
                 txn_date=e.txn_date,
                 currency_id=currency_id,
                 amount=e.amount,
-                transaction_type_id=txn_type_id,
+                transaction_type_id=txn_type_map[e.type],
                 category_id=category_id,
                 wallet_id=wallet_id,
                 to_wallet_id=to_wallet_id,
@@ -49,6 +55,6 @@ def _get_currency_id(client, code: str) -> int:
     return result.data["id"]
 
 
-def _get_txn_type_id(client, name: str) -> int:
-    result = client.table("transaction_types").select("id").eq("name", name).single().execute()
-    return result.data["id"]
+def _get_txn_type_map(client) -> dict[str, int]:
+    result = client.table("transaction_types").select("id, name").execute()
+    return {row["name"]: row["id"] for row in result.data}

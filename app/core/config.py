@@ -6,8 +6,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_service_key: str
 
-    class Config:
-        env_file = ".env"
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()

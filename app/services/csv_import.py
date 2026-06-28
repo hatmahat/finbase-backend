@@ -6,17 +6,25 @@ from pkg.parser import fingerprint as fp
 from app.repositories import transaction as txn_repo, wallet as wallet_repo, category as cat_repo
 from app.models.transaction import Transaction
 
+# Categories renamed/split since the CSV was exported — map old name → current DB name.
+CATEGORY_MAP: dict[str, str] = {
+    "Subscriptions": "Other Subscription",
+}
+
 
 def run(csv_path: str) -> tuple[int, int]:
     client = get_client()
     wallet_map = wallet_repo.get_name_to_id(client)
     category_map = cat_repo.get_name_to_id(client)
+    txn_type_map = _get_txn_type_map(client)
     currency_id = _get_currency_id(client, "IDR")
 
     transactions: list[Transaction] = []
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for raw in reader:
+            if not (raw.get("originWallet") or "").strip():
+                continue
             row = CsvRow.model_validate(raw)
 
             wallet_id = wallet_map.get(row.origin_wallet)
@@ -30,16 +38,17 @@ def run(csv_path: str) -> tuple[int, int]:
                 row.amount,
                 row.note or "",
             )
-            txn_type_id = _get_txn_type_id(client, row.type.lower())
             to_wallet_id = wallet_map.get(row.destination_wallet) if row.destination_wallet else None
-            category_id = category_map.get(row.category) if row.category else None
+
+            cat_name = CATEGORY_MAP.get(row.category, row.category) if row.category else None
+            category_id = category_map.get(cat_name) if cat_name else None
 
             transactions.append(
                 Transaction(
                     txn_date=row.date,
                     currency_id=currency_id,
                     amount=row.amount,
-                    transaction_type_id=txn_type_id,
+                    transaction_type_id=txn_type_map[row.type.lower()],
                     category_id=category_id,
                     wallet_id=wallet_id,
                     to_wallet_id=to_wallet_id,
@@ -58,6 +67,6 @@ def _get_currency_id(client, code: str) -> int:
     return result.data["id"]
 
 
-def _get_txn_type_id(client, name: str) -> int:
-    result = client.table("transaction_types").select("id").eq("name", name).single().execute()
-    return result.data["id"]
+def _get_txn_type_map(client) -> dict[str, int]:
+    result = client.table("transaction_types").select("id, name").execute()
+    return {row["name"]: row["id"] for row in result.data}

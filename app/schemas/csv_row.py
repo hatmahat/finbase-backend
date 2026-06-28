@@ -1,10 +1,10 @@
-from pydantic import BaseModel, Field
-from datetime import date
+from pydantic import BaseModel, Field, field_validator
+from datetime import datetime
 from decimal import Decimal
 
 
 class CsvRow(BaseModel):
-    date: date
+    date: datetime
     amount: Decimal
     type: str
     category: str | None = None
@@ -14,3 +14,8 @@ class CsvRow(BaseModel):
     location: str | None = None
 
     model_config = {"populate_by_name": True}
+
+    @field_validator("type", "category", "origin_wallet", "destination_wallet", "note", "location", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: str | None) -> str | None:
+        return v.strip() if isinstance(v, str) else v
